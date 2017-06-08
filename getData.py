@@ -7,10 +7,11 @@ from parse import *
 import yaml
 import numpy as np
 import cmath
+from sympy import *
 
 #This function is designed to return refractive index for specified lambda
 #for file in "tabluated n " format
-def getDataN(yamlFile,lamb):
+def getDataN(yamlFile,lamb,retcoeffs=False):
 	yamlStream=open(yamlFile,'r')
 	allData=yaml.load(yamlStream);	
 
@@ -23,7 +24,7 @@ def getDataN(yamlFile,lamb):
 	matN=[]
 	matK=[]
 	#in this type of material read data line by line
-	for line in materialData["data"].split('\n'):
+	for line in materialData["data"].split('\r\n'):
 		parsed=parse("{l:g} {n:g} {k:g}",line)
 		try:
 			n=parsed["n"]+1j*parsed["k"]
@@ -31,7 +32,7 @@ def getDataN(yamlFile,lamb):
 			matN.append(parsed["n"])
 			matK.append(parsed["k"])
 		except TypeError as e:
-			sys.stderr.write("TypeError occured:"+str(e)+"\n")
+			sys.stderr.write("TypeError occured:"+str(e)+"\r\n")
 
 	matLambda=np.array(matLambda)
 	matN=np.array(matN)
@@ -40,7 +41,7 @@ def getDataN(yamlFile,lamb):
 	interN=interp1d(matLambda,matN)
 	interK=interp1d(matLambda,matK)
 	
-	return [ cmath.sqrt(x) for x in interN(lamb)]
+	return [ cmath.sqrt(x) for x in np.nditer(interN(lamb))]
 
 
 def getRangeN(yamlFile):
@@ -52,12 +53,12 @@ def getRangeN(yamlFile):
 	assert materialData["type"]=="tabulated n"
 	#in this type of material read data line by line
 	matLambda=[]
-	for line in materialData["data"].split('\n'):
+	for line in materialData["data"].split('\r\n'):
 		parsed=parse("{l:g} {n:g}",line)
 		try:
 			matLambda.append(parsed["l"])
 		except TypeError as e:
-			sys.stderr.write("TypeError occured:"+str(e)+"\n")
+			sys.stderr.write("TypeError occured:"+str(e)+"\r\n")
 	return (min(matLambda),max(matLambda))
 		
 		
@@ -67,7 +68,7 @@ def getRangeN(yamlFile):
 
 #This function is designed to return refractive index for specified lambda
 #for file in "tabluated nk " format
-def getDataNK(yamlFile,lamb):
+def getDataNK(yamlFile,lamb,retcoeffs=False):
 	yamlStream=open(yamlFile,'r')
 	allData=yaml.load(yamlStream);	
 
@@ -80,7 +81,7 @@ def getDataNK(yamlFile,lamb):
 	matN=[]
 	matK=[]
 	#in this type of material read data line by line
-	for line in materialData["data"].split('\n'):
+	for line in materialData["data"].split('\r\n'):
 		parsed=parse("{l:g} {n:g} {k:g}",line)
 		try:
 			n=parsed["n"]+1j*parsed["k"]
@@ -88,7 +89,7 @@ def getDataNK(yamlFile,lamb):
 			matN.append(parsed["n"])
 			matK.append(parsed["k"])
 		except TypeError as e:
-			sys.stderr.write("TypeError occured:"+str(e)+"\n")
+			sys.stderr.write("TypeError occured:"+str(e)+"\r\n")
 
 	matLambda=np.array(matLambda)
 	matN=np.array(matN)
@@ -97,7 +98,7 @@ def getDataNK(yamlFile,lamb):
 	interN=interp1d(matLambda,matN)
 	interK=interp1d(matLambda,matK)
 	
-	return [ x for x in (interN(lamb)+1j*interK(lamb)) ]
+	return [ x for x in np.nditer(interN(lamb)+1j*interK(lamb)) ]
 
 def getRangeNK(yamlFile):
 	yamlStream=open(yamlFile,'r')
@@ -108,19 +109,19 @@ def getRangeNK(yamlFile):
 	assert materialData["type"]=="tabulated nk"
 	#in this type of material read data line by line
 	matLambda=[]
-	for line in materialData["data"].split('\n'):
+	for line in materialData["data"].split('\r\n'):
 		parsed=parse("{l:g} {n:g} {k:g}",line)
 		try:
 			matLambda.append(parsed["l"])
 		except TypeError as e:
-			sys.stderr.write("TypeError occured:"+str(e)+"\n")
+			sys.stderr.write("TypeError occured:"+str(e)+"\r\n")
 	return (min(matLambda),max(matLambda))
 		
 		
 
 
 ##this function is desined to get data from files in formula1 format
-def getDataF1(yamlFile,lamb):
+def getDataF1(yamlFile,lamb,retcoeffs=False):
 	yamlStream=open(yamlFile,'r')
 	allData=yaml.load(yamlStream);	
 
@@ -132,22 +133,26 @@ def getDataF1(yamlFile,lamb):
 	coeff=np.array(map(float,materialData["coefficients"].split()));
 
 	n=0
+	L = Symbol('L')
+	N=0
 	if min(lamb)>=dataRange[0] or max(lamb)<=dataRange[1]:
 		for i in reversed(range(1,np.size(coeff),2)):
 			n=n+((coeff[i]*lamb**2)/(lamb**2-coeff[i+1]**2))
+			N=N+((coeff[i]*L**2)/(L**2-coeff[i+1]**2))
 		
 	else:
 		raise Exception("OutOfBands","No data for this material for this l")
 	
 	n=n+coeff[0]+1
+	N=sqrt(N+coeff[0]+1)
 	epsRes=[]
 	for oneN in n:
 		epsRes.append(cmath.sqrt(oneN))
-	return epsRes
+	return [epsRes,N]
 
 
 ##this function is desined to get data from files in formula2 format
-def getDataF2(yamlFile,lamb):
+def getDataF2(yamlFile,lamb,retcoeffs=False):
 	yamlStream=open(yamlFile,'r')
 	allData=yaml.load(yamlStream);	
 
@@ -159,22 +164,26 @@ def getDataF2(yamlFile,lamb):
 	coeff=np.array(map(float,materialData["coefficients"].split()));
 
 	n=0
+	L = Symbol('L')
+	N=0
 	if min(lamb)>=dataRange[0] or max(lamb)<=dataRange[1]:
 		for i in reversed(range(1,np.size(coeff),2)):
 			n=n+((coeff[i]*lamb**2)/(lamb**2-coeff[i+1]))
+			N=N+((coeff[i]*L**2)/(L**2-coeff[i+1]))
 		
 	else:
 		raise Exception("OutOfBands","No data for this material for this l")
 	
 	n=n+coeff[0]+1
+	N=sqrt(N+coeff[0]+1)
 	nres=[]
 	for oneN in n:
 		nres.append(cmath.sqrt(oneN))
-	return nres
+	return [nres,N]
 
 
 ##this function is desined to get data from files in formula3 format
-def getDataF3(yamlFile,lamb):
+def getDataF3(yamlFile,lamb,retcoeffs=False):
 	yamlStream=open(yamlFile,'r')
 	allData=yaml.load(yamlStream);	
 
@@ -189,18 +198,22 @@ def getDataF3(yamlFile,lamb):
 
 
 	n=coeff[0]
+	L = Symbol('L');
+	N=coeff[0];
 	if min(lamb)>=dataRange[0] and max(lamb)<=dataRange[1]:
 		for i in range(1,np.size(coeff),2):
 			n=n+coeff[i]*lamb**coeff[i+1]
+			N=N+coeff[i]*L**coeff[i+1]
 	else:
-		raise Exception("OutOfBands","No data for this material for lambda="+str(l))
+		raise Exception("OutOfBands","No data for this material for lambda="+str(lamb))
 	
 	nres=[]
+	N=sqrt(N);
 	for oneN in n:
 		nres.append(cmath.sqrt(oneN))
 	return nres
 
-def getDataF4(yamlFile,lamb):
+def getDataF4(yamlFile,lamb,retcoeffs=False):
 	yamlStream=open(yamlFile,'r')
 	allData=yaml.load(yamlStream);	
 
@@ -215,12 +228,14 @@ def getDataF4(yamlFile,lamb):
 	for i in range(0,len(coeff2)):
 		coeff[i]=coeff2[i]
 
-	print coeff
+	print(coeff)
 
 
 
 
 	n=coeff[0]
+	L = Symbol('L');
+	N = coeff[0];
 	if min(lamb)>=dataRange[0] and max(lamb)<=dataRange[1]:
 			n=n+coeff[1]*lamb**coeff[2]/(lamb**2-coeff[3]**coeff[4])
 			n=n+coeff[5]*lamb**coeff[6]/(lamb**2-coeff[7]**coeff[8])
@@ -228,13 +243,21 @@ def getDataF4(yamlFile,lamb):
 			n=n+coeff[11]*lamb**coeff[12]
 			n=n+coeff[13]*lamb**coeff[14]
 			n=n+coeff[15]*lamb**coeff[16]
+
+			N=N+coeff[1]*L**coeff[2]/(L**2-coeff[3]**coeff[4])
+			N=N+coeff[5]*L**coeff[6]/(L**2-coeff[7]**coeff[8])
+			N=N+coeff[9]*L**coeff[10]
+			N=N+coeff[11]*L**coeff[12]
+			N=N+coeff[13]*L**coeff[14]
+			N=N+coeff[15]*L**coeff[16]
 	else:
 		raise Exception("OutOfBands","No data for this material("+yamlFile+" )for lambda="+str(lamb))
 	
 	nres=[]
+	N = sqrt(N)
 	for oneN in n:
 		nres.append(cmath.sqrt(oneN))
-	return nres
+	return [nres,N]
 
 
 
@@ -247,7 +270,7 @@ def Error(BaseException):
 	pass
 
 ###this is general function to check data type, and run appropriate actions
-def getData(yamlFile,lamb):
+def getData(yamlFile,lamb,retcoeffs=False):
 	yamlStream=open(yamlFile,'r')
 	allData=yaml.load(yamlStream)
 	materialData=allData["DATA"][0]
@@ -292,11 +315,11 @@ def getRange(yamlFile):
 
 
 if __name__ == "__main__":
-	print "Direct tests:"
-	print "MyData="+str(getDataNK("database/main/Ag/Rakic.yml",1))+" ,test ~  0.23 + 6.41j"
-	print "MyData="+str(getDataF3("database/other/doped crystals/Mg-LiTaO3/Moutzouris-e.yml",np.array([0.7473])))+" test ~"
-	print "MyData="+str(getDataF2("./database/main/CaCO3/Ghosh-o.yml",np.array([0.204])))+", test ~ 1.88"
-	print "Tests through general getData function "
-	print "MyData="+str(getData("database/main/Ag/Rakic.yml",1))
-	print "MyData="+str(getData("database/other/doped crystals/Mg-LiTaO3/Moutzouris-e.yml",np.array([0.7473])))
-	print "MyData="+str(getData("./database/main/CaCO3/Ghosh-o.yml",np.array([0.204])))
+	print("Direct tests:")
+	print("MyData(Rakic)="+str(getDataNK("database/main/Ag/Rakic.yml",1))+" ,test ~  0.23 + 6.41j")
+	print("MyData(Moutzouris-e)="+str(getDataF3("database/other/doped crystals/Mg-LiTaO3/Moutzouris-e.yml",np.array([0.7473])))+" test ~")
+	print("MyData(Ghosh-o)="+str(getDataF2("./database/main/CaCO3/Ghosh-o.yml",np.array([0.204])))+", test ~ 1.88")
+	print("Tests through general getData function ")
+	print("MyData(Rakic)="+str(getData("database/main/Ag/Rakic.yml",1)))
+	print("MyData(Moutzouris-e)="+str(getData("database/other/doped crystals/Mg-LiTaO3/Moutzouris-e.yml",np.array([0.7473]))))
+	print("MyData(Ghosh-o)="+str(getData("./database/main/CaCO3/Ghosh-o.yml",np.array([0.204]))))
